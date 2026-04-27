@@ -20,34 +20,33 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
-        <!-- Start Screen -->
+        <!-- スタート画面 -->
         <div id="start-screen" class="text-center bg-white/95 p-10 rounded-3xl shadow-2xl interactive border-4 border-blue-500">
             <h1 class="text-5xl font-black mb-4 text-gray-800">Stickman Run</h1>
             <p class="mb-6 text-gray-700 font-bold text-lg">エリアを選択してスタート！</p>
             
             <div class="grid grid-cols-3 gap-4 justify-center mb-8">
                 <button id="start-town" class="bg-blue-500 hover:bg-blue-600 text-white font-black py-4 px-4 rounded-2xl text-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg">
-                    街<br><span class="text-xs font-normal">鉄骨なし</span>
+                    街<br><span class="text-xs font-normal">鉄骨なし・タイヤ</span>
                 </button>
                 <button id="start-consite" class="bg-orange-500 hover:bg-orange-600 text-white font-black py-4 px-4 rounded-2xl text-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg">
-                    工事現場<br><span class="text-xs font-normal">鉄骨・穴あり</span>
+                    工事現場<br><span class="text-xs font-normal">ギミック鉄骨</span>
                 </button>
                 <button id="start-nature" class="bg-green-600 hover:bg-green-700 text-white font-black py-4 px-4 rounded-2xl text-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg">
-                    自然<br><span class="text-xs font-normal">丸太・鳥</span>
+                    自然<br><span class="text-xs font-normal">丸太・穴</span>
                 </button>
             </div>
 
-            <p class="mb-2 text-blue-600 font-bold">Space または クリックでジャンプ</p>
-            <p class="text-gray-500 text-sm">「E」キー長押しで当たり判定・グリッドを表示</p>
-            <p class="text-gray-400 text-xs mt-2">「1」キーで100mワープ(3秒無敵)</p>
+            <p class="mb-2 text-blue-600 font-bold">Space / Enter / クリックでジャンプ</p>
+            <p class="text-gray-400 text-xs mt-2">「E」判定表示 / 「3」全破壊 / 「4」シーソー / 「5」沈む / 「6」ターザン</p>
         </div>
 
-        <!-- Game Over Screen -->
+        <!-- ゲームオーバー画面 -->
         <div id="game-over-screen" class="hidden text-center bg-white/95 p-10 rounded-3xl shadow-2xl interactive border-4 border-red-500">
             <h2 class="text-4xl font-black mb-2 text-red-600">GAME OVER</h2>
             <p id="final-score" class="text-3xl mb-8 font-mono font-bold text-gray-700"></p>
             <button id="restart-button" class="bg-gray-800 hover:bg-black text-white font-black py-4 px-12 rounded-full text-2xl transition-all shadow-xl">
-                RETRY
+                リトライ
             </button>
         </div>
     </div>
@@ -63,8 +62,8 @@
         const restartButton = document.getElementById('restart-button');
         const finalScoreLabel = document.getElementById('final-score');
 
-        // --- Settings ---
-        const VERSION = "v1.4.7"; // バージョン更新
+        // --- 設定 ---
+        const VERSION = "v1.8.10"; 
         const GRID_SIZE = 60; 
         const BASE_GAME_SPEED = 6; 
         const NORMAL_JUMP_HEIGHT = 2.2; 
@@ -78,6 +77,7 @@
             run: ['bouninngenn_hasiru.svg', 'bouninngenn_hasiru2.svg', 'bouninngenn_hasiru3.svg', 'bouninngenn_hasiru4.svg'],
             stop: ['bouninngenn_tomaru.svg', 'bouninngenn_tomaru2.svg'],
             jump: 'bouninngenn_tamanori3.svg', 
+            tarzan: 'bouninngenn_ta-zann.svg', 
             ground: 'sennro.svg',
             cone: {
                 default: 'sannkakuko-nn.svg',
@@ -89,22 +89,27 @@
             tekkotu: 'tekkotu.svg',
             bolt: 'tekkotu_boruto.svg',
             maruta: 'maruta.svg',
-            tori: 'tori.svg',
+            taiya: 'taiya.svg',           
+            tamanori: ['bouninngenn_tamanori.svg', 'bouninngenn_tamanori2.svg', 'bouninngenn_tamanori3.svg'], 
             bgm: 'BGM_bouninngenn.mp3',
             metalStep: 'kinnzoku_aruku.wav',
-            soilStep: 'tuti_aruku.wav',      // 追加
-            asphaltStep: 'asufaruto_aruku.wav', // 追加
-            rain: 'ame.mp3'                 // 追加
+            soilStep: 'tuti_aruku.wav',
+            asphaltStep: 'asufaruto_aruku.wav',
+            rain: 'ame.mp3'
         };
 
         const images = {};
         const sounds = {}; 
         let showDebug = false;
+        let isKey3Pressed = false; 
+        let forceNextSeesaw = false; 
+        let forceNextSinking = false; 
+        let forceNextRope = false; // 新しい6キー用フラグ
 
         const SKY_COLORS = [
-            { r: 69, g: 196, b: 255 }, // 昼
-            { r: 255, g: 136, b: 81 }, // 夕
-            { r: 55, g: 51, b: 77 }    // 夜
+            { r: 69, g: 196, b: 255 }, 
+            { r: 255, g: 136, b: 81 }, 
+            { r: 55, g: 51, b: 77 }    
         ];
         let currentSkyRGB = { ...SKY_COLORS[0] };
         let stars = [];
@@ -133,8 +138,8 @@
         }
 
         function updateSpeedLines() {
-            const baseChance = (selectedArea === 'CONSTRUCTION') ? 0.15 : 0;
-            const accelChance = (timeScale > 1.1) ? (timeScale - 1) * 0.2 : 0;
+            const baseChance = (selectedArea === 'CONSTRUCTION' ? 0.15 : 0);
+            const accelChance = (timeScale > 1.1 ? (timeScale - 1) * 0.2 : 0);
             if (Math.random() < (baseChance + accelChance)) {
                 speedLines.push({
                     x: canvas.width,
@@ -152,13 +157,15 @@
         function preloadAssets() {
             ASSETS.run.forEach((src, i) => { images[`run${i}`] = new Image(); images[`run${i}`].src = src; });
             ASSETS.stop.forEach((src, i) => { images[`stop${i}`] = new Image(); images[`stop${i}`].src = src; });
+            ASSETS.tamanori.forEach((src, i) => { images[`tamanori${i}`] = new Image(); images[`tamanori${i}`].src = src; });
             images.jump = new Image(); images.jump.src = ASSETS.jump;
+            images.tarzan = new Image(); images.tarzan.src = ASSETS.tarzan;
             images.ground = new Image(); images.ground.src = ASSETS.ground;
             images.trash = new Image(); images.trash.src = ASSETS.trash;
             images.tekkotu = new Image(); images.tekkotu.src = ASSETS.tekkotu;
             images.bolt = new Image(); images.bolt.src = ASSETS.bolt;
             images.maruta = new Image(); images.maruta.src = ASSETS.maruta;
-            images.tori = new Image(); images.tori.src = ASSETS.tori;
+            images.taiya = new Image(); images.taiya.src = ASSETS.taiya;
             Object.keys(ASSETS.cone).forEach(key => {
                 images[`cone_${key}`] = new Image();
                 images[`cone_${key}`].src = ASSETS.cone[key];
@@ -172,10 +179,16 @@
             sounds.rain = new Audio(ASSETS.rain);
         }
 
-        function drawImageAtGrid(img, fallbackImg, x, footY, targetW, debugColor = 'rgba(255,0,0,0.3)', yOff = 0, yAlignment = 'bottom') {
+        function drawImageAtGrid(img, fallbackImg, x, footY, targetW, debugColor = 'rgba(255,0,0,0.3)', yOff = 0, yAlignment = 'bottom', emojiFallback = null) {
             let activeImg = (img && img.complete && img.naturalWidth !== 0) ? img : fallbackImg;
             if (!activeImg || !activeImg.complete || activeImg.naturalWidth === 0) {
-                if (showDebug) { ctx.fillStyle = debugColor; ctx.fillRect(x, footY - GRID_SIZE, targetW, GRID_SIZE); }
+                if (emojiFallback) {
+                    ctx.font = `${GRID_SIZE * 0.8}px serif`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(emojiFallback, x + targetW/2, footY - GRID_SIZE/4 - yOff);
+                } else if (showDebug) {
+                    ctx.fillStyle = debugColor; ctx.fillRect(x, footY - GRID_SIZE, targetW, GRID_SIZE);
+                }
                 return;
             }
             const refImg = images.cone_default;
@@ -192,13 +205,19 @@
             ctx.drawImage(activeImg, x + offX, finalY, drawW, drawH);
         }
 
-        // --- Game State ---
+        // --- ゲーム状態 ---
         let gameState = 'START';
         let selectedArea = 'TOWN'; 
         let score = 0;
+        let lastSpawnCheckMeter = 0; 
         let frameCount = 0;
         let cameraX = 0;
+        let lastRollingSpawnX = -50 * GRID_SIZE; 
+        let lastPatternEndX = 0; 
         let obstacles = [];
+        let projectiles = []; 
+        let tempProjectiles = []; 
+        let enemyProjectiles = []; 
         let nextSpawnX = 0;
         let animationId;
         let timeScale = 1.0;
@@ -223,10 +242,20 @@
             groundLevelY: 0,
             velocityY: 0,
             isJumping: false,
+            isRolling: false, 
+            rollingType: null, 
+            // ターザン用
+            isTarzan: false,
+            tarzanRef: null,
+            tarzanAngle: 0,
+            tarzanSpeed: 0,
+
             runSequence: [0, 1, 2, 3, 2, 1], 
+            tamanoriSequence: [1, 2], 
             animStep: 0,
             onObstacle: false,
             onObstacleType: null,
+            onObstacleRef: null, 
             invincibleTimer: 0 
         };
 
@@ -249,7 +278,7 @@
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             player.groundLevelY = Math.floor(canvas.height / GRID_SIZE) * GRID_SIZE - GRID_SIZE;
-            if (gameState !== 'PLAYING') player.footY = player.groundLevelY;
+            if (gameState === 'START') player.footY = player.groundLevelY;
             initStars();
         }
 
@@ -257,17 +286,39 @@
         resize();
         preloadAssets();
 
+        function spawnEnemyTire() {
+            enemyProjectiles.push({
+                x: cameraX + canvas.width + 500,
+                y: player.groundLevelY - GRID_SIZE,
+                vx: -(BASE_GAME_SPEED * 1.5), 
+                vy: 0, 
+                type: 'TIRE',
+                rotation: 0
+            });
+        }
+
         function initGame(area) {
             selectedArea = area;
             score = 0;
+            lastSpawnCheckMeter = 0;
             cameraX = 0;
+            lastRollingSpawnX = -50 * GRID_SIZE;
+            lastPatternEndX = 0;
             obstacles = [];
+            projectiles = [];
+            tempProjectiles = [];
+            enemyProjectiles = [];
             player.footY = player.groundLevelY;
             player.prevFootY = player.groundLevelY;
             player.velocityY = 0;
             player.isJumping = false;
+            player.isRolling = false;
+            player.rollingType = null;
+            player.isTarzan = false;
+            player.tarzanRef = null;
             player.onObstacle = false;
             player.onObstacleType = null;
+            player.onObstacleRef = null;
             player.animStep = 0;
             player.invincibleTimer = 0;
             lastSpeedLevel = 0;
@@ -277,53 +328,132 @@
             speedLines = [];
             specialPattern.active = false;
             specialPattern.phase = 'NORMAL';
+            forceNextSeesaw = false;
+            forceNextSinking = false;
+            forceNextRope = false;
             nextSpawnX = (Math.floor(canvas.width / GRID_SIZE) + 8) * GRID_SIZE;
 
             sounds.bgm.currentTime = 0;
-            sounds.bgm.playbackRate = 1.0;
+            sounds.bgm.playbackRate = 1.0; 
             sounds.bgm.play().catch(e => console.log("Audio play blocked", e));
         }
 
         function spawnObstacle() {
+            if (score > lastSpawnCheckMeter) {
+                lastSpawnCheckMeter = score;
+                if (score > 100 && Math.random() < 0.005) {
+                    spawnEnemyTire();
+                }
+            }
+
             while (cameraX + canvas.width + GRID_SIZE * 5 > nextSpawnX) {
                 const currentNextSpawnX = nextSpawnX;
+                const canSpawnRolling = (nextSpawnX - lastRollingSpawnX > 50 * GRID_SIZE);
+
+                let type = 'CONE';
+                let length = 1;
+                let yGrid = 0;
+                let isHole = false;
+                let isDeadly = false;
+                let interval = Math.floor(Math.random() * 8) + 6;
+                
+                let isSinking = false;
+                let isSeesaw = false;
+                let isRope = false;
 
                 if (selectedArea === 'NATURE') {
                     const rnd = Math.random();
-                    let type = 'LOG'; let length = 1; let yGrid = 0; let interval = Math.floor(Math.random() * 8) + 5; let isHole = false;
                     if (rnd < 0.1 && score > 50) { type = 'PIT_GAP'; length = Math.floor(Math.random() * 3) + 2; isHole = true; }
-                    else if (rnd < 0.4) { type = 'BIRD'; yGrid = Math.random() > 0.5 ? 1 : 2; }
-                    else { type = 'LOG'; length = Math.floor(Math.random() * 3) + 1; }
-                    obstacles.push({ gridX: Math.floor(nextSpawnX / GRID_SIZE), type: type, length: length, gridYOffset: yGrid, isHole: isHole });
-                    nextSpawnX += (length + interval) * GRID_SIZE;
+                    else if (canSpawnRolling && rnd < 0.3) { type = 'LOG'; length = 1; lastRollingSpawnX = nextSpawnX; }
+                    else { type = 'LOG'; length = player.isRolling ? 5 : Math.floor(Math.random() * 3) + 1; }
                 } else if (selectedArea === 'CONSTRUCTION' && specialPattern.active) {
                     if (specialPattern.phase === 'TRASH_PRELUDE') {
-                        obstacles.push({ gridX: Math.floor(nextSpawnX / GRID_SIZE), type: 'TRASH', length: 1, gridYOffset: 0, isHole: false });
+                        type = 'TRASH'; length = 1;
                         specialPattern.count++;
                         if (specialPattern.count >= specialPattern.trashCount) {
                             specialPattern.phase = 'TEKKOTU'; specialPattern.count = 0;
                             const dy = -(specialPattern.currentYGrid - 0) * GRID_SIZE;
                             const gapPx = calculateIdealGapPx(dy, true);
-                            obstacles.push({ gridX: Math.floor((nextSpawnX + GRID_SIZE) / GRID_SIZE), length: Math.ceil((gapPx - GRID_SIZE) / GRID_SIZE), type: 'PIT_GAP', isHole: true });
+                            obstacles.push({ 
+                                gridX: Math.floor(nextSpawnX / GRID_SIZE), type: type, length: length, gridYOffset: 0, 
+                                isHole: false, segmentsStatus: new Array(length).fill(true) 
+                            });
                             nextSpawnX += gapPx; 
-                        } else { nextSpawnX += GRID_SIZE; }
+                            continue;
+                        }
                     } else {
-                        const length = specialPattern.length;
-                        obstacles.push({ gridX: Math.floor(nextSpawnX / GRID_SIZE), type: 'TEKKOTU', length: length, gridYOffset: specialPattern.currentYGrid, isHole: true });
+                        length = specialPattern.length; type = 'TEKKOTU'; isHole = true; yGrid = specialPattern.currentYGrid;
                         const prevY = specialPattern.currentYGrid;
+                        
+                        // ギミックの抽選判定
+                        if (forceNextRope) {
+                            isRope = true; forceNextRope = false;
+                        } else if (forceNextSinking) {
+                            isSinking = true; forceNextSinking = false;
+                        } else if (forceNextSeesaw) {
+                            isSeesaw = true; forceNextSeesaw = false;
+                        } else if (Math.random() < 0.3 && yGrid >= 2 && obstacles.length > 0 && obstacles[obstacles.length-1].type === 'TEKKOTU') {
+                            isRope = true;
+                        } else if (Math.random() < 0.14) { 
+                            if ((length === 3 || length === 5) && yGrid >= 3) {
+                                isSinking = true;
+                            } else if ((length === 7 || length === 9) && yGrid >= 4) {
+                                isSeesaw = true;
+                            }
+                        }
+
                         specialPattern.count++;
-                        if (specialPattern.count < specialPattern.maxSteps) { specialPattern.currentYGrid += specialPattern.dir; }
-                        else if (specialPattern.count === specialPattern.maxSteps) { specialPattern.dir = -1; specialPattern.currentYGrid += specialPattern.dir; }
-                        else if (specialPattern.count < specialPattern.maxSteps * 2 - 1) { specialPattern.currentYGrid += specialPattern.dir; }
-                        else { specialPattern.active = false; }
-                        let gapPx; const interval = (score >= 200) ? 2 : 1;
-                        if (specialPattern.dir === 1 && length === 1) { const dy = -(specialPattern.currentYGrid - prevY) * GRID_SIZE; gapPx = calculateIdealGapPx(dy, false); }
-                        else { gapPx = (length + interval) * GRID_SIZE; }
-                        obstacles.push({ gridX: Math.floor((nextSpawnX + length * GRID_SIZE) / GRID_SIZE), length: Math.ceil((gapPx - length * GRID_SIZE) / GRID_SIZE), type: 'PIT_GAP', isHole: true });
-                        nextSpawnX += gapPx;
+                        if (specialPattern.count < specialPattern.maxSteps) { 
+                            specialPattern.currentYGrid += specialPattern.dir; 
+                        } else if (specialPattern.count === specialPattern.maxSteps) { 
+                            specialPattern.dir = -1; specialPattern.currentYGrid += specialPattern.dir; 
+                        } else if (specialPattern.count < specialPattern.maxSteps * 2 - 1) { 
+                            specialPattern.currentYGrid += specialPattern.dir; 
+                        } else { 
+                            specialPattern.active = false; lastPatternEndX = nextSpawnX + 20 * GRID_SIZE; 
+                        }
+
+                        let gapPx; const stepInterval = (score >= 200) ? 2 : 1;
+                        if (specialPattern.dir === 1 && length === 1) { 
+                            const dy = -(specialPattern.currentYGrid - prevY) * GRID_SIZE; gapPx = calculateIdealGapPx(dy, false); 
+                        } else { 
+                            gapPx = (length + stepInterval) * GRID_SIZE; 
+                        }
+                        
+                        if (isSinking) specialPattern.currentYGrid = Math.max(0, specialPattern.currentYGrid - 2);
+                        if (isSeesaw) specialPattern.currentYGrid = Math.max(0, specialPattern.currentYGrid - 4);
+                        if (specialPattern.currentYGrid < 0) specialPattern.currentYGrid = 0;
+
+                        if (isRope) {
+                            const prevGirder = obstacles.findLast(o => o.type === 'TEKKOTU') || {gridX:0, length:0, gridYOffset:0};
+                            const ropeStartX = (prevGirder.gridX + prevGirder.length) * GRID_SIZE;
+                            const ropeStartY = player.groundLevelY - (prevGirder.gridYOffset * GRID_SIZE);
+                            obstacles.push({
+                                type: 'ROPE',
+                                pivotX: ropeStartX + 200, pivotY: 0,
+                                restX: ropeStartX, restY: ropeStartY,
+                                length: Math.sqrt(Math.pow(200, 2) + Math.pow(ropeStartY, 2)),
+                                angle: Math.atan2(ropeStartY, -200),
+                                currentAngle: Math.atan2(ropeStartY, -200),
+                                segmentsStatus: [true]
+                            });
+                        } else {
+                            obstacles.push({ 
+                                gridX: Math.floor(nextSpawnX / GRID_SIZE), type: type, length: length, gridYOffset: yGrid, 
+                                isHole: isHole, segmentsStatus: new Array(length).fill(true),
+                                isSinking: isSinking, sinkOffset: 0, 
+                                isSeesaw: isSeesaw, tilt: 0 
+                            });
+                        }
+                        
+                        const gapStartX = Math.floor((nextSpawnX + length * GRID_SIZE) / GRID_SIZE);
+                        const gapLength = Math.ceil((gapPx - length * GRID_SIZE) / GRID_SIZE);
+                        obstacles.push({ gridX: gapStartX, length: gapLength, type: 'PIT_GAP', isHole: true });
+                        nextSpawnX += gapPx; continue;
                     }
                 } else {
-                    if (selectedArea === 'CONSTRUCTION' && score > 50 && Math.random() < 0.3) {
+                    const rnd = Math.random();
+                    if (selectedArea === 'CONSTRUCTION' && score > 50 && rnd < 0.2 && nextSpawnX > lastPatternEndX) {
                         specialPattern.active = true; specialPattern.count = 0; specialPattern.maxSteps = Math.floor(Math.random() * 5) + 1; specialPattern.dir = 1;
                         let possibleLengths;
                         if (score < 150) possibleLengths = [5, 7]; else if (score < 250) possibleLengths = [3, 5, 7]; else if (score < 350) possibleLengths = [1, 3, 5]; else possibleLengths = [1];
@@ -333,96 +463,311 @@
                             if (score < 400) specialPattern.trashCount = Math.floor(Math.random() * 3) + 3; else if (score < 600) specialPattern.trashCount = Math.floor(Math.random() * 3) + 1; else specialPattern.trashCount = 1;
                             specialPattern.currentYGrid = Math.floor(Math.random() * 2) + 1; nextSpawnX += GRID_SIZE * 5; 
                         } else { specialPattern.phase = 'TEKKOTU'; specialPattern.currentYGrid = -1; }
+                        continue;
                     } else {
-                        const type = Math.random() > 0.5 ? 'CONE' : 'TRASH';
-                        const length = type === 'CONE' ? Math.floor(Math.random() * 5) + 1 : Math.floor(Math.random() * 3) + 1; 
-                        obstacles.push({ gridX: Math.floor(nextSpawnX / GRID_SIZE), type: type, length: length, gridYOffset: 0, isHole: false });
-                        const interval = Math.floor(Math.random() * 6) + 4; nextSpawnX += (length + interval) * GRID_SIZE;
+                        if (canSpawnRolling && rnd < 0.3) { type = 'TIRE'; lastRollingSpawnX = nextSpawnX; } 
+                        else if (rnd < 0.6) { type = 'TRASH'; length = player.isRolling ? 5 : Math.floor(Math.random() * 3) + 1; }
+                        else { type = 'CONE'; length = player.isRolling ? 7 : Math.floor(Math.random() * 3) + 1; }
                     }
                 }
 
-                if (nextSpawnX <= currentNextSpawnX) {
-                    nextSpawnX = currentNextSpawnX + GRID_SIZE;
-                }
+                obstacles.push({
+                    gridX: Math.floor(nextSpawnX / GRID_SIZE),
+                    type: type,
+                    length: length,
+                    gridYOffset: yGrid,
+                    isHole: isHole,
+                    isDeadly: isDeadly,
+                    segmentsStatus: new Array(length).fill(true)
+                });
+                nextSpawnX += (length + (player.isRolling ? 4 : interval)) * GRID_SIZE;
+
+                if (nextSpawnX <= currentNextSpawnX) nextSpawnX = currentNextSpawnX + GRID_SIZE;
             }
         }
 
+        // --- プロジェクトタイル作成 (一時バッファ方式で安全に) ---
+        function createProjectile(type, gx, gyOffset, vx, vy, isBall = false, subType = 'default') {
+            const ox = gx * GRID_SIZE;
+            const oy = player.groundLevelY - (gyOffset * GRID_SIZE);
+            const p = {
+                x: ox,
+                y: oy - GRID_SIZE,
+                vx: vx,
+                vy: vy,
+                type: type,
+                subType: subType, 
+                rotation: 0,
+                isDebris: !isBall,
+                isBall: isBall
+            };
+            tempProjectiles.push(p);
+            return p;
+        }
+
+        function startPlayerDeath(type = 'PLAYER_FLY') {
+            if (gameState === 'DYING' || gameState === 'GAMEOVER') return;
+            gameState = 'DYING';
+            createProjectile(type, player.gridX + (cameraX/GRID_SIZE), 0, -30, -20, false);
+            player.footY = canvas.height + 2000; 
+            sounds.bgm.pause();
+        }
+
         function update() {
-            if (gameState !== 'PLAYING') return;
+            if (gameState === 'GAMEOVER') return;
+
+            // 死亡演出中の判定
+            if (gameState === 'DYING') {
+                const playerProjectile = projectiles.find(p => p.type === 'PLAYER_FLY');
+                const stickmanHeadY = player.footY - (GRID_SIZE * PLAYER_HEIGHT_IN_BLOCKS);
+                const isFallenOut = stickmanHeadY > canvas.height;
+                if (!playerProjectile && isFallenOut) {
+                    gameOver();
+                    return;
+                }
+            }
 
             frameCount++;
-            
             const currentSpeedLevel = Math.floor(score / SPEED_STEP_SCORE);
-            timeScale = 1.0 + currentSpeedLevel * SPEED_INCREMENT;
-
-            if (currentSpeedLevel > lastSpeedLevel) {
-                lastSpeedLevel = currentSpeedLevel;
-                speedUpEffectTimer = 100; 
-                sounds.bgm.playbackRate = Math.min(1.5, 1.0 + currentSpeedLevel * 0.05);
+            
+            if (gameState === 'PLAYING') {
+                let rollingMultiplier = player.isRolling ? 1.5 : 1.0;
+                timeScale = (1.0 + currentSpeedLevel * SPEED_INCREMENT) * rollingMultiplier;
+                if (currentSpeedLevel > lastSpeedLevel) {
+                    lastSpeedLevel = currentSpeedLevel;
+                    speedUpEffectTimer = 100; 
+                }
+                if (speedUpEffectTimer > 0) speedUpEffectTimer--;
+                cameraX += BASE_GAME_SPEED * timeScale;
+                score = Math.floor(cameraX / GRID_SIZE);
+                sounds.bgm.playbackRate = 1.0;
+            } else {
+                timeScale = 1.0;
             }
-            if (speedUpEffectTimer > 0) speedUpEffectTimer--;
-
-            cameraX += BASE_GAME_SPEED * timeScale;
-            score = Math.floor(cameraX / GRID_SIZE);
 
             updateSkyColor();
             updateSpeedLines();
 
             if (player.invincibleTimer > 0) player.invincibleTimer--;
 
+            const prevGrounded = (player.footY >= player.groundLevelY - 10 || player.onObstacle);
             player.prevFootY = player.footY;
-            player.velocityY += BASE_GRAVITY * timeScale;
-            player.footY += player.velocityY * timeScale;
+
+            if (!player.isTarzan) {
+                player.velocityY += BASE_GRAVITY * timeScale;
+                player.footY += player.velocityY * timeScale;
+            }
 
             const px = player.gridX * GRID_SIZE;
-            const pBox = { left: px + 22, right: px + GRID_SIZE - 22, centerX: px + GRID_SIZE / 2, bottom: player.footY };
+            const pBox = { 
+                left: px + 22, right: px + GRID_SIZE - 22, 
+                centerX: px + GRID_SIZE / 2,
+                top: player.footY - (GRID_SIZE * PLAYER_HEIGHT_IN_BLOCKS),
+                bottom: player.footY 
+            };
+
+            // 落下判定 (頭が画面外に出るまで)
+            if (gameState === 'PLAYING') {
+                const headY = player.footY - (GRID_SIZE * PLAYER_HEIGHT_IN_BLOCKS);
+                if (headY > canvas.height) {
+                    gameOver();
+                    return;
+                }
+            }
 
             let foundGround = false;
             let currentType = null;
+            let currentRef = null;
             let onHoleZone = false;
 
-            obstacles.forEach((obs) => {
-                const obsStartX = obs.gridX * GRID_SIZE - cameraX;
-                const obsEndX = obsStartX + obs.length * GRID_SIZE;
-                if (obs.isHole && obsStartX < pBox.right && obsEndX > pBox.left) onHoleZone = true;
-                const padding = (obs.type === 'TEKKOTU' && obs.length === 1) ? GRID_SIZE * 0.5 : 0;
-                if (obsStartX - padding < pBox.right && obsEndX + padding > pBox.left) {
+            // --- 敵タイヤの更新 ---
+            const newEnemyProjectiles = [];
+            enemyProjectiles.forEach((p, idx) => {
+                p.x += p.vx;
+                p.rotation += (p.vx < 0 ? -0.2 : 0.2);
+                p.vy += BASE_GRAVITY * timeScale;
+                p.y += p.vy;
+
+                let onEnemyHole = false;
+                const checkX = p.x + GRID_SIZE / 2;
+                obstacles.forEach(o => {
+                    const ox = o.gridX * GRID_SIZE;
+                    const ex = ox + (o.length || 1) * GRID_SIZE;
+                    if (checkX >= ox && checkX < ex && o.isHole) onEnemyHole = true;
+                });
+
+                if (!onEnemyHole && p.y >= player.groundLevelY - GRID_SIZE) {
+                    p.y = player.groundLevelY - GRID_SIZE;
+                    p.vy = 0;
+                }
+
+                obstacles.forEach(obs => {
+                    if (obs.type === 'TEKKOTU' || obs.type === 'PIT_GAP' || obs.type === 'ROPE') return;
                     for (let i = 0; i < obs.length; i++) {
-                        let bStartX = obsStartX + i * GRID_SIZE - padding;
-                        let bEndX = obsStartX + (i+1) * GRID_SIZE + padding;
-                        if (bStartX < pBox.right && bEndX > pBox.left) {
-                            let topOffset = GRID_SIZE;
-                            if (obs.type === 'CONE' && obs.length > 1 && i > 0 && i < obs.length - 1) topOffset = GRID_SIZE * 0.8; 
-                            const obstacleTopY = player.groundLevelY - topOffset - (obs.gridYOffset * GRID_SIZE);
-                            const isFalling = player.velocityY >= 0;
-                            const wasAbove = player.prevFootY <= obstacleTopY + 18; 
-                            const isTouching = player.footY >= obstacleTopY - (25 * timeScale) && player.footY <= obstacleTopY + (25 * timeScale);
-                            if (isFalling && isTouching) {
-                                if (obs.type !== 'TEKKOTU' || wasAbove) {
-                                    player.footY = obstacleTopY; player.velocityY = 0;
-                                    if (player.isJumping) player.animStep = 3; 
-                                    player.isJumping = false; foundGround = true; currentType = obs.type;
-                                }
+                        if (!obs.segmentsStatus[i]) continue;
+                        const ox = (obs.gridX + i) * GRID_SIZE;
+                        if (Math.abs(p.x - ox) < GRID_SIZE && Math.abs(p.y - (player.groundLevelY - GRID_SIZE)) < GRID_SIZE) {
+                            if (obs.type === 'TIRE' && Math.abs(p.vx) > 0) {
+                                let originalVx = p.vx;
+                                p.vx = 0; 
+                                obs.segmentsStatus[i] = false;
+                                newEnemyProjectiles.push({
+                                    x: ox, y: player.groundLevelY - GRID_SIZE,
+                                    vx: originalVx, vy: 0, type: 'TIRE', rotation: 0
+                                });
+                            } else {
+                                obs.segmentsStatus[i] = false;
+                                createProjectile(obs.type, obs.gridX + i, obs.gridYOffset, p.vx - 10, -15);
+                            }
+                        }
+                    }
+                });
+
+                const tireLeft = p.x - cameraX;
+                const tireRight = tireLeft + GRID_SIZE;
+                const tireTop = p.y;
+                const tireBottom = p.y + GRID_SIZE;
+
+                if (gameState === 'PLAYING' && tireLeft < pBox.right && tireRight > pBox.left) {
+                    if (tireTop < pBox.bottom && tireBottom > pBox.top) {
+                        if (isKey3Pressed) {
+                            createProjectile('TIRE', p.x/GRID_SIZE, (player.groundLevelY - p.y)/GRID_SIZE, 30, -20);
+                            p.toRemove = true;
+                        } else if (pBox.bottom < tireTop + 25 && !player.isRolling && p.vy >= 0) {
+                            player.isRolling = true;
+                            player.rollingType = 'TIRE';
+                            player.footY = tireTop;
+                            player.velocityY = 0;
+                            p.toRemove = true;
+                        } else if (player.invincibleTimer <= 0) {
+                            if (player.isRolling) {
+                                createProjectile(player.rollingType, player.gridX + (cameraX/GRID_SIZE), 0, -15, -15, true);
+                                createProjectile('TIRE', (p.x/GRID_SIZE), 0, 15, -15, true);
+                                player.isRolling = false;
+                                p.toRemove = true;
+                            } else {
+                                startPlayerDeath();
                             }
                         }
                     }
                 }
+                if (p.x < cameraX - 1000 || p.y > canvas.height + 200 || (p.x > cameraX + canvas.width + 1000 && p.vx > 0)) p.toRemove = true;
+            });
+            enemyProjectiles = enemyProjectiles.filter(p => !p.toRemove).concat(newEnemyProjectiles);
+
+            // --- ロープと鉄骨ギミックの更新 ---
+            obstacles.forEach(obs => {
+                if (obs.type === 'ROPE') {
+                    if (player.isTarzan && player.tarzanRef === obs) {
+                        obs.currentAngle += player.tarzanSpeed;
+                        player.tarzanSpeed += Math.cos(obs.currentAngle) * 0.005;
+                        player.tarzanSpeed *= 0.99; 
+                        
+                        const tipX = obs.pivotX + Math.sin(obs.currentAngle) * obs.length;
+                        const tipY = obs.pivotY + Math.cos(obs.currentAngle) * obs.length;
+                        player.footY = tipY;
+                        player.gridX = (tipX - cameraX) / GRID_SIZE;
+                    }
+                }
+
+                if (obs.isSinking) {
+                    if (player.onObstacle && player.onObstacleRef === obs) {
+                        obs.sinkOffset += GRID_SIZE / 30; 
+                    } else if (obs.sinkOffset > 0) {
+                        obs.sinkOffset -= GRID_SIZE / 60; 
+                        if (obs.sinkOffset < 0) obs.sinkOffset = 0;
+                    }
+                }
+                if (obs.isSeesaw && player.onObstacle && player.onObstacleRef === obs) {
+                    const girderCenterX = (obs.gridX + obs.length / 2) * GRID_SIZE;
+                    const playerCenterX = player.gridX * GRID_SIZE + GRID_SIZE / 2 + cameraX;
+                    const distFromCenter = (playerCenterX - girderCenterX) / (obs.length * GRID_SIZE / 2);
+                    const targetTilt = distFromCenter * 0.35;
+                    obs.tilt += (targetTilt - obs.tilt) * 0.05;
+                }
             });
 
-            if (player.invincibleTimer <= 0) {
+            // 障害物判定
+            if (gameState === 'PLAYING') {
                 obstacles.forEach((obs) => {
-                    if (obs.type === 'TEKKOTU' || obs.type === 'PIT_GAP') return; 
+                    if (obs.type === 'ROPE') {
+                        const tipX = obs.pivotX - cameraX + Math.sin(obs.currentAngle) * obs.length;
+                        const tipY = obs.pivotY + Math.cos(obs.currentAngle) * obs.length;
+                        if (!player.isTarzan && Math.abs(px - tipX) < 40 && Math.abs(player.footY - tipY) < 40) {
+                            player.isTarzan = true;
+                            player.tarzanRef = obs;
+                            player.tarzanSpeed = 0.05;
+                            player.velocityY = 0;
+                            player.isJumping = false;
+                        }
+                        return;
+                    }
+
                     const obsStartX = obs.gridX * GRID_SIZE - cameraX;
-                    const obsEndX = obsStartX + obs.length * GRID_SIZE;
-                    if (obsStartX < pBox.right && obsEndX > pBox.left) {
-                        for (let i = 0; i < obs.length; i++) {
-                            const bStartX = obsStartX + i * GRID_SIZE;
-                            if (bStartX < pBox.right && bStartX + GRID_SIZE > pBox.left) {
-                                let topOffset = GRID_SIZE;
-                                if (obs.type === 'CONE' && obs.length > 1 && i > 0 && i < obs.length - 1) topOffset = GRID_SIZE * 0.8; 
-                                const obstacleTopY = player.groundLevelY - topOffset - (obs.gridYOffset * GRID_SIZE);
-                                if (pBox.bottom > obstacleTopY + 35 && pBox.bottom - (GRID_SIZE * PLAYER_HEIGHT_IN_BLOCKS) < obstacleTopY) {
-                                    if (pBox.right > bStartX + 8) gameOver();
+                    const obsEndX = obsStartX + (obs.length || 1) * GRID_SIZE;
+                    if (obs.isHole && obsStartX < pBox.right && obsEndX > pBox.left) onHoleZone = true;
+                    if (obs.type === 'PIT_GAP') return;
+
+                    const padding = (obs.type === 'TEKKOTU' && obs.length === 1) ? GRID_SIZE * 0.5 : 0;
+                    for (let i = 0; i < (obs.length || 1); i++) {
+                        if (!obs.segmentsStatus[i]) continue;
+                        const segStartX = obsStartX + i * GRID_SIZE - padding;
+                        const segEndX = segStartX + GRID_SIZE + padding * 2;
+                        
+                        if (segStartX < pBox.right && segEndX > pBox.left) {
+                            let topOffset = GRID_SIZE;
+                            let subT = 'default';
+                            if (obs.type === 'CONE') {
+                                subT = i === 0 ? 'left' : (i === obs.length - 1 ? 'right' : 'center');
+                                if (obs.length === 1) subT = 'default';
+                                if (subT === 'center') topOffset = GRID_SIZE * 0.8;
+                            }
+
+                            let sy_current = obs.isSinking ? player.groundLevelY + obs.sinkOffset : player.groundLevelY;
+                            let obstacleTopY = sy_current - topOffset - (obs.gridYOffset * GRID_SIZE);
+                            
+                            if (obs.isSeesaw) {
+                                const centerX = (obs.gridX + obs.length / 2) * GRID_SIZE;
+                                const currentX = (obs.gridX + i + 0.5) * GRID_SIZE;
+                                obstacleTopY += (currentX - centerX) * Math.sin(obs.tilt);
+                            }
+
+                            const canBeBlown = (player.isRolling || isKey3Pressed) && !obs.isDeadly;
+                            const isHitHorizontal = (pBox.bottom > obstacleTopY + 25 && pBox.bottom - (GRID_SIZE * PLAYER_HEIGHT_IN_BLOCKS) < obstacleTopY);
+
+                            if (canBeBlown && isHitHorizontal && pBox.right > segStartX + 5) {
+                                obs.segmentsStatus[i] = false;
+                                createProjectile(obs.type, obs.gridX + i, obs.gridYOffset, (25 + i * 2) * timeScale, -12 - Math.random() * 8, false, subT);
+                                continue; 
+                            }
+
+                            const isFalling = player.velocityY >= 0;
+                            const wasAbove = player.prevFootY <= obstacleTopY + 18; 
+                            const isTouchingTop = player.footY >= obstacleTopY - (25 * timeScale) && player.footY <= obstacleTopY + (25 * timeScale);
+
+                            if (isFalling && isTouchingTop) {
+                                const landingAllowed = (!player.isRolling && !isKey3Pressed) || obs.type === 'TEKKOTU';
+                                if (landingAllowed && (obs.type !== 'TEKKOTU' || wasAbove)) {
+                                    player.footY = obstacleTopY; player.velocityY = 0;
+                                    if (player.isJumping) player.animStep = 3; 
+                                    player.isJumping = false; foundGround = true; currentType = obs.type;
+                                    currentRef = obs;
+
+                                    if (!player.isRolling && (obs.type === 'TIRE' || (obs.type === 'LOG' && obs.length === 1))) {
+                                        player.isRolling = true; player.rollingType = obs.type;
+                                        obs.segmentsStatus[i] = false;
+                                    }
+                                }
+                            }
+
+                            if (!player.isRolling && !isKey3Pressed && player.invincibleTimer <= 0) {
+                                if (isHitHorizontal && pBox.right > segStartX + 8) {
+                                    if (obs.type === 'TIRE' || (obs.type === 'LOG' && obs.length === 1)) {
+                                        obs.segmentsStatus[i] = false;
+                                        createProjectile(obs.type, obs.gridX + i, obs.gridYOffset, 30 * timeScale, -10, true);
+                                    } else if (obs.type !== 'TEKKOTU') {
+                                        startPlayerDeath();
+                                    }
                                 }
                             }
                         }
@@ -430,52 +775,87 @@
                 });
             }
 
+            // 玉連鎖
+            projectiles.forEach((p, pIdx) => {
+                if (!p.isBall) return; 
+                obstacles.forEach((obs) => {
+                    if (obs.type === 'TEKKOTU' || obs.type === 'PIT_GAP' || obs.type === 'ROPE') return;
+                    for (let i = 0; i < obs.length; i++) {
+                        if (!obs.segmentsStatus[i]) continue;
+                        const ox = (obs.gridX + i) * GRID_SIZE;
+                        const oy = player.groundLevelY - (obs.gridYOffset * GRID_SIZE);
+                        if (Math.abs(p.x - ox) < GRID_SIZE * 1.2 && Math.abs(p.y - (oy - GRID_SIZE)) < GRID_SIZE * 1.2) {
+                            if (obs.type === 'TIRE' || (obs.type === 'LOG' && obs.length === 1)) {
+                                createProjectile(obs.type, obs.gridX + i, obs.gridYOffset, -15, -15, true);
+                                p.vx = -Math.abs(p.vx);
+                                obs.segmentsStatus[i] = false;
+                            } else if (!obs.isDeadly) {
+                                obs.segmentsStatus[i] = false;
+                                let subT = i === 0 ? 'left' : (i === obs.length - 1 ? 'right' : 'center');
+                                createProjectile(obs.type, obs.gridX + i, obs.gridYOffset, p.vx * 0.8 + 10, -8 - Math.random() * 5, false, subT);
+                            }
+                        }
+                    }
+                });
+            });
+
+            obstacles = obstacles.filter(obs => obs.type === 'PIT_GAP' || obs.type === 'ROPE' || obs.segmentsStatus.some(s => s));
             player.onObstacle = foundGround;
             player.onObstacleType = currentType;
+            player.onObstacleRef = currentRef;
 
-            if (!player.onObstacle) {
+            if (!player.onObstacle && !player.isTarzan) {
                 if (player.footY > player.groundLevelY) {
                     if (player.invincibleTimer > 0) {
                         player.footY = player.groundLevelY; player.velocityY = 0;
                         if (player.isJumping) player.animStep = 3; player.isJumping = false;
-                    } else if (onHoleZone) {
-                        if (player.footY > player.groundLevelY + GRID_SIZE * 1.5) gameOver();
+                    } else if (onHoleZone || player.footY > player.groundLevelY + GRID_SIZE) {
                     } else {
-                        player.footY = player.groundLevelY; player.velocityY = 0;
-                        if (player.isJumping) player.animStep = 3; player.isJumping = false;
+                        if (gameState === 'PLAYING') {
+                            player.footY = player.groundLevelY; player.velocityY = 0;
+                            if (player.isJumping) player.animStep = 3; player.isJumping = false;
+                        }
                     }
                 } else if (player.footY < player.groundLevelY - 1) {
                     player.isJumping = true;
                 }
             }
 
-            // アニメーション更新と足音再生
-            const animThreshold = Math.max(1, Math.floor(4 / timeScale));
+            const currentGrounded = (player.footY >= player.groundLevelY - 10 || player.onObstacle);
+            if (!prevGrounded && currentGrounded && gameState === 'PLAYING') playStepSound(); 
+
+            const animThreshold = Math.max(1, Math.floor(4 / (timeScale * (player.isRolling ? 1.0 : 1.0))));
             if (frameCount % animThreshold === 0) {
                 const prevStepIndex = player.animStep;
-                player.animStep = (player.animStep + 1) % player.runSequence.length;
-                const prevFrameValue = player.runSequence[prevStepIndex];
-                const currentFrameValue = player.runSequence[player.animStep];
-
-                // 【修正】hasiru3(2)からhasiru4(3)に変わった瞬間にエリアに応じた足音を鳴らす
-                if (!player.isJumping) {
-                    if (prevFrameValue === 2 && currentFrameValue === 3) {
-                        if (player.onObstacle && player.onObstacleType === 'TEKKOTU') {
-                            sounds.metalStep.currentTime = 0;
-                            sounds.metalStep.play().catch(e => {});
-                        } else if (selectedArea === 'NATURE') {
-                            sounds.soilStep.currentTime = 0;
-                            sounds.soilStep.play().catch(e => {});
-                        } else {
-                            sounds.asphaltStep.currentTime = 0;
-                            sounds.asphaltStep.play().catch(e => {});
-                        }
-                    }
+                player.animStep = (player.animStep + 1) % (player.isRolling ? player.tamanoriSequence.length : player.runSequence.length);
+                const prevFrameValue = player.isRolling ? player.tamanoriSequence[prevStepIndex] : player.runSequence[prevStepIndex];
+                const currentFrameValue = player.isRolling ? player.tamanoriSequence[player.animStep] : player.runSequence[player.animStep];
+                if (gameState === 'PLAYING' && !player.isJumping && !player.isRolling) {
+                    if (prevFrameValue === 2 && currentFrameValue === 3) playStepSound();
                 }
             }
 
-            spawnObstacle();
-            obstacles = obstacles.filter(obs => (obs.gridX * GRID_SIZE + obs.length * GRID_SIZE - cameraX) > -GRID_SIZE * 10);
+            // 新しく生成された物体を結合 (updateの最後で行うことで消失を防ぐ)
+            projectiles = projectiles.concat(tempProjectiles);
+            tempProjectiles = [];
+
+            projectiles.forEach((p, idx) => {
+                p.x += p.vx; p.y += p.vy; p.vy += BASE_GRAVITY; p.rotation += (p.vx > 0 ? 0.3 : -0.3);
+                if (p.y > canvas.height + 500 || p.x > cameraX + canvas.width + 1000 || p.x < cameraX - 2000) projectiles.splice(idx, 1);
+            });
+
+            if (gameState === 'PLAYING') spawnObstacle();
+            obstacles = obstacles.filter(obs => (obs.gridX * GRID_SIZE + (obs.length || 1) * GRID_SIZE - cameraX) > -GRID_SIZE * 10 || obs.type === 'ROPE');
+        }
+
+        function playStepSound() {
+            if (player.onObstacle && player.onObstacleType === 'TEKKOTU') {
+                sounds.metalStep.currentTime = 0; sounds.metalStep.play().catch(e => {});
+            } else if (selectedArea === 'NATURE') {
+                sounds.soilStep.currentTime = 0; sounds.soilStep.play().catch(e => {});
+            } else {
+                sounds.asphaltStep.currentTime = 0; sounds.asphaltStep.play().catch(e => {});
+            }
         }
 
         function draw() {
@@ -492,22 +872,21 @@
                     ctx.beginPath(); ctx.arc(finalX, star.y, star.size, 0, Math.PI * 2); ctx.fill();
                 });
             }
+            
             if (showDebug) {
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = 1;
-                const gridOff = -(cameraX % GRID_SIZE);
-                for (let x = gridOff; x < canvas.width; x += GRID_SIZE) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
-                for (let y = player.groundLevelY; y > 0; y -= GRID_SIZE) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.lineWidth = 1;
+                const gridStartX = -(cameraX % GRID_SIZE);
+                for(let x=gridStartX; x<canvas.width; x+=GRID_SIZE) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+                for(let y=canvas.height; y>0; y-=GRID_SIZE) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
             }
-            speedLines.forEach(line => { ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.beginPath(); ctx.moveTo(line.x, line.y); ctx.lineTo(line.x + line.length, line.y); ctx.stroke(); });
 
             const areaGroundColor = selectedArea === 'NATURE' ? '#d18d5d' : '#3f3f3f';
             const startX = -(cameraX % GRID_SIZE);
-
             for (let x = startX; x < canvas.width + GRID_SIZE; x += GRID_SIZE) {
                 const worldGridX = Math.floor((cameraX + x) / GRID_SIZE);
                 let hasHole = false; let forceGround = false;
                 obstacles.forEach(o => {
-                    if (worldGridX >= o.gridX && worldGridX < o.gridX + o.length) {
+                    if (worldGridX >= o.gridX && worldGridX < o.gridX + (o.length || 1)) {
                         if (o.isHole) hasHole = true;
                         if (!o.isHole && o.type !== 'PIT_GAP') forceGround = true;
                     }
@@ -519,8 +898,6 @@
                     if (worldGridX > 0 && worldGridX % 100 === 0) {
                         ctx.fillStyle = 'white'; ctx.font = 'bold 20px sans-serif'; ctx.textAlign = 'center';
                         ctx.fillText(`${worldGridX}m`, x + GRID_SIZE/2, player.groundLevelY + 40);
-                        ctx.strokeStyle = 'black'; ctx.lineWidth = 3;
-                        ctx.beginPath(); ctx.moveTo(x + GRID_SIZE/2, player.groundLevelY); ctx.lineTo(x + GRID_SIZE/2, player.groundLevelY + 20); ctx.stroke();
                     }
                 } else {
                     ctx.fillStyle = `rgb(${Math.floor(currentSkyRGB.r)}, ${Math.floor(currentSkyRGB.g)}, ${Math.floor(currentSkyRGB.b)})`;
@@ -528,90 +905,207 @@
                 }
             }
 
+            const nightFilterStickman = isNight ? `brightness(0) invert(${nightFactor}) brightness(${1 + nightFactor})` : 'none';
+            const nightFilterObject = isNight ? `brightness(${1 + nightFactor * 0.5})` : 'none';
+
+            // --- 障害物描画 ---
+            ctx.save();
+            ctx.filter = nightFilterObject;
             obstacles.forEach(obs => {
                 if (obs.type === 'PIT_GAP') return; 
+                
+                if (obs.type === 'ROPE') {
+                    const tipX = obs.pivotX - cameraX + Math.sin(obs.currentAngle) * obs.length;
+                    const tipY = obs.pivotY + Math.cos(obs.currentAngle) * obs.length;
+                    ctx.strokeStyle = '#8b4513'; ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(obs.pivotX - cameraX, obs.pivotY);
+                    ctx.lineTo(tipX, tipY);
+                    ctx.stroke();
+                    return;
+                }
+
                 const ox = obs.gridX * GRID_SIZE - cameraX;
                 const footY = player.groundLevelY - (obs.gridYOffset * GRID_SIZE);
-                if (obs.type === 'TEKKOTU') {
-                    for (let i = 0; i < obs.length; i++) {
-                        const mid = Math.floor(obs.length / 2);
+                const mid = Math.floor(obs.length / 2);
+
+                for (let i = 0; i < obs.length; i++) {
+                    if (!obs.segmentsStatus[i]) continue;
+                    const sx = ox + i * GRID_SIZE;
+                    let sy = obs.isSinking ? footY + obs.sinkOffset : footY;
+
+                    if (obs.type === 'TEKKOTU') {
                         if (i === mid) {
                             ctx.strokeStyle = isNight ? '#777' : '#222'; ctx.lineWidth = 2;
-                            ctx.beginPath(); ctx.moveTo(ox + i * GRID_SIZE + GRID_SIZE / 2, footY - GRID_SIZE); ctx.lineTo(ox + i * GRID_SIZE + GRID_SIZE / 2, 0); ctx.stroke();
-                            drawImageAtGrid(images.bolt, null, ox + i * GRID_SIZE, footY, GRID_SIZE, 'rgba(255,0,0,0.3)', 0, 'top');
-                        } else { drawImageAtGrid(images.tekkotu, null, ox + i * GRID_SIZE, footY, GRID_SIZE, 'rgba(255,0,0,0.3)', 0, 'top'); }
-                    }
-                } else if (obs.type === 'CONE') {
-                    if (obs.length === 1) { drawImageAtGrid(images.cone_default, null, ox, player.groundLevelY, GRID_SIZE); }
-                    else { for (let i = 0; i < obs.length; i++) {
-                            let t = i === 0 ? 'right' : (i === obs.length - 1 ? 'left' : 'center');
-                            let yOff = (t === 'center' ? GRID_SIZE * 0.8 : 0);
-                            drawImageAtGrid(images[`cone_${t}`], images.cone_default, ox + i * GRID_SIZE, player.groundLevelY, GRID_SIZE, 'rgba(255,0,0,0.3)', yOff);
-                        } }
-                } else if (obs.type === 'TRASH') { for (let i = 0; i < obs.length; i++) drawImageAtGrid(images.trash, null, ox + i * GRID_SIZE, player.groundLevelY, GRID_SIZE); }
-                else if (obs.type === 'LOG') { for (let i = 0; i < obs.length; i++) drawImageAtGrid(images.maruta, null, ox + i * GRID_SIZE, player.groundLevelY, GRID_SIZE, 'rgba(139,69,19,0.3)'); }
-                else if (obs.type === 'BIRD') { drawImageAtGrid(images.tori, null, ox, footY, GRID_SIZE, 'rgba(255,255,0,0.3)'); }
+                            ctx.beginPath(); ctx.moveTo(sx + GRID_SIZE/2, sy - GRID_SIZE); ctx.lineTo(sx + GRID_SIZE/2, -canvas.height); ctx.stroke();
+                        }
+                        
+                        ctx.save();
+                        if (obs.isSeesaw) {
+                            const centerX = ox + (obs.length * GRID_SIZE) / 2;
+                            ctx.translate(centerX, sy);
+                            ctx.rotate(obs.tilt);
+                            ctx.translate(-centerX, -sy);
+                        }
+                        drawImageAtGrid(images.tekkotu, null, sx, sy, GRID_SIZE, 'rgba(255,0,0,0.3)', 0, 'top');
+                        if (i === mid) { drawImageAtGrid(images.bolt, null, sx, sy, GRID_SIZE, 'rgba(255,0,0,0.3)', 0, 'top'); }
+                        ctx.restore();
+                    } else if (obs.type === 'CONE') {
+                        let t = i === 0 ? 'left' : (i === obs.length - 1 ? 'right' : 'center');
+                        if (obs.length === 1) t = 'default';
+                        let yOff = (t === 'center' ? GRID_SIZE * 0.8 : 0);
+                        drawImageAtGrid(images[`cone_${t}`], images.cone_default, sx, sy, GRID_SIZE, 'rgba(255,0,0,0.3)', yOff);
+                    } else if (obs.type === 'TRASH') { drawImageAtGrid(images.trash, null, sx, sy, GRID_SIZE); }
+                    else if (obs.type === 'LOG') { drawImageAtGrid(images.maruta, null, sx, sy, GRID_SIZE); }
+                    else if (obs.type === 'TIRE') { drawImageAtGrid(images.taiya, null, sx, sy, GRID_SIZE); }
+                }
             });
-
-            let playerImg = (player.isJumping || (player.velocityY !== 0 && !player.onObstacle)) ? images.jump : images[`run${player.runSequence[player.animStep]}`];
-            ctx.save();
-            if (player.invincibleTimer > 0) ctx.globalAlpha = (Math.floor(frameCount / 4) % 2 === 0) ? 0.3 : 0.7;
-            if (isNight) ctx.filter = `brightness(0) invert(${nightFactor}) brightness(${1 + nightFactor})`;
-            drawImageAtGrid(playerImg, null, player.gridX * GRID_SIZE, player.footY, GRID_SIZE, 'rgba(0,255,0,0.3)');
             ctx.restore();
 
-            if (showDebug) { ctx.strokeStyle = 'lime'; ctx.lineWidth = 2; ctx.strokeRect(player.gridX * GRID_SIZE + 22, player.footY - GRID_SIZE * PLAYER_HEIGHT_IN_BLOCKS, GRID_SIZE - 44, GRID_SIZE * PLAYER_HEIGHT_IN_BLOCKS); }
-            
+            enemyProjectiles.forEach(p => {
+                ctx.save();
+                ctx.translate(p.x - cameraX + GRID_SIZE/2, p.y + GRID_SIZE/2);
+                ctx.rotate(p.rotation);
+                ctx.drawImage(images.taiya, -GRID_SIZE/2, -GRID_SIZE/2, GRID_SIZE, GRID_SIZE);
+                ctx.restore();
+            });
+
+            ctx.save();
+            ctx.filter = nightFilterObject;
+            projectiles.forEach(p => {
+                ctx.save();
+                ctx.translate(p.x - cameraX + GRID_SIZE/2, p.y + GRID_SIZE/2);
+                ctx.rotate(p.rotation);
+                let img;
+                if (p.type === 'PLAYER_FLY') img = images.stop0;
+                else if (p.type === 'TIRE') img = images.taiya;
+                else if (p.type === 'LOG') img = images.maruta;
+                else if (p.type === 'TRASH') img = images.trash;
+                else if (p.type === 'CONE') img = (p.subType && p.subType !== 'default') ? images[`cone_${p.subType}`] : images.cone_default;
+                else img = images.cone_default;
+                let scale = (images.cone_default.complete) ? (GRID_SIZE / images.cone_default.naturalHeight) : (GRID_SIZE / img.naturalHeight);
+                ctx.drawImage(img, -(img.naturalWidth * scale)/2, -(img.naturalHeight * scale)/2, img.naturalWidth * scale, img.naturalHeight * scale);
+                ctx.restore();
+            });
+            ctx.restore();
+
+            // プレイヤー描画
+            ctx.save();
             if (gameState === 'PLAYING') {
+                if (player.invincibleTimer > 0) ctx.globalAlpha = (Math.floor(frameCount / 4) % 2 === 0) ? 0.3 : 0.7;
+                
+                ctx.save();
+                ctx.filter = nightFilterStickman;
+                if (player.isTarzan) {
+                    const tipX = player.gridX * GRID_SIZE;
+                    const tipY = player.footY;
+                    ctx.translate(tipX + GRID_SIZE/2, tipY);
+                    ctx.rotate(player.tarzanRef.currentAngle - Math.PI);
+                    ctx.drawImage(images.tarzan, -GRID_SIZE/2, -GRID_SIZE, GRID_SIZE, GRID_SIZE);
+                } else if (player.isRolling) {
+                    const rollX = player.gridX * GRID_SIZE;
+                    const rollY = player.footY - GRID_SIZE; 
+                    ctx.save();
+                    ctx.filter = nightFilterObject;
+                    ctx.translate(rollX + GRID_SIZE / 2, rollY + GRID_SIZE / 2);
+                    ctx.rotate((cameraX / (GRID_SIZE / 2)) % (Math.PI * 2));
+                    ctx.drawImage(player.rollingType === 'TIRE' ? images.taiya : images.maruta, -GRID_SIZE/2, -GRID_SIZE/2, GRID_SIZE, GRID_SIZE);
+                    ctx.restore();
+                    drawImageAtGrid(images[`tamanori${player.tamanoriSequence[player.animStep]}`], null, rollX, rollY, GRID_SIZE, 'rgba(0,255,0,0.3)', 0);
+                } else {
+                    const displayImg = isKey3Pressed ? images.tamanori1 : 
+                        ((player.isJumping || (player.velocityY !== 0 && !player.onObstacle)) ? images[`tamanori0`] : images[`run${player.runSequence[player.animStep]}`]);
+                    drawImageAtGrid(displayImg, null, player.gridX * GRID_SIZE, player.footY, GRID_SIZE, 'rgba(0,255,0,0.3)');
+                }
+                ctx.restore();
+            }
+            ctx.restore();
+
+            if (showDebug) {
+                ctx.strokeStyle = 'lime'; ctx.lineWidth = 2;
+                ctx.strokeRect(player.gridX * GRID_SIZE + 22, player.footY - GRID_SIZE * PLAYER_HEIGHT_IN_BLOCKS, GRID_SIZE - 44, GRID_SIZE * PLAYER_HEIGHT_IN_BLOCKS);
+                obstacles.forEach(obs => {
+                    if (obs.type === 'ROPE') return;
+                    const ox = obs.gridX * GRID_SIZE - cameraX;
+                    for (let i = 0; i < obs.length; i++) {
+                        if (!obs.segmentsStatus[i]) continue;
+                        ctx.strokeStyle = 'red';
+                        let sy_base = obs.isSinking ? player.groundLevelY + obs.sinkOffset : player.groundLevelY;
+                        let sy = sy_base - GRID_SIZE - (obs.gridYOffset*GRID_SIZE);
+                        if(obs.isSeesaw) {
+                            const centerX = (obs.gridX + obs.length / 2) * GRID_SIZE;
+                            const curX = (obs.gridX + i + 0.5) * GRID_SIZE;
+                            sy += (curX - centerX) * Math.sin(obs.tilt);
+                        }
+                        ctx.strokeRect(ox + i * GRID_SIZE, sy, GRID_SIZE, GRID_SIZE);
+                    }
+                });
+            }
+
+            if (gameState === 'PLAYING' || gameState === 'DYING') {
                 ctx.fillStyle = 'white'; ctx.font = '900 28px sans-serif'; ctx.textAlign = 'left';
                 ctx.fillText(`${score} m`, 30, 50);
-                ctx.font = '700 14px sans-serif';
-                const areaNames = { TOWN: '街', CONSTRUCTION: '工事現場', NATURE: '自然' };
-                ctx.fillText(`AREA: ${areaNames[selectedArea]}`, 30, 80);
-                if (player.invincibleTimer > 0) { ctx.fillStyle = 'rgba(255, 255, 0, 0.8)'; ctx.fillRect(30, 100, player.invincibleTimer, 5); }
-
-                if (speedUpEffectTimer > 0) {
-                    ctx.save();
-                    ctx.fillStyle = `rgba(255, 255, 255, ${speedUpEffectTimer / 200})`;
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    
-                    ctx.fillStyle = 'white';
-                    ctx.font = '900 80px sans-serif'; 
-                    ctx.textAlign = 'center';
-                    ctx.shadowBlur = 20;
-                    ctx.shadowColor = 'red';
-                    ctx.fillText('SPEED UP!!', canvas.width / 2, canvas.height / 2);
-                    ctx.restore();
+                if (isKey3Pressed) {
+                    ctx.fillStyle = '#00ffff'; ctx.font = '700 18px sans-serif';
+                    ctx.fillText('全破壊・なぎ倒しモード！！', 30, 80);
                 }
             }
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; ctx.font = '12px monospace'; ctx.textAlign = 'right'; ctx.fillText(VERSION, canvas.width - 10, canvas.height - 10);
         }
 
-        function gameLoop() { update(); draw(); if (gameState === 'PLAYING') animationId = requestAnimationFrame(gameLoop); }
+        function gameLoop() { 
+            update(); 
+            draw(); 
+            if (gameState !== 'GAMEOVER') animationId = requestAnimationFrame(gameLoop); 
+        }
 
         function jump() {
+            if (gameState !== 'PLAYING') return;
+
+            if (player.isTarzan) {
+                const obs = player.tarzanRef;
+                const vx = Math.cos(obs.currentAngle) * (player.tarzanSpeed * 500);
+                const vy = -Math.sin(obs.currentAngle) * (player.tarzanSpeed * 500) - 10;
+                player.velocityY = vy;
+                player.isTarzan = false;
+                player.tarzanRef = null;
+                player.isJumping = true;
+                return;
+            }
+
             const grounded = (player.footY >= player.groundLevelY - 10 || player.onObstacle);
-            if (gameState === 'PLAYING' && !player.isJumping && grounded) {
-                const jumpHeight = (player.onObstacle && player.onObstacleType === 'TRASH') ? HIGH_JUMP_HEIGHT : NORMAL_JUMP_HEIGHT;
+            if (!player.isJumping && grounded) {
+                let jumpHeight = (player.onObstacle && player.onObstacleType === 'TRASH') ? HIGH_JUMP_HEIGHT : NORMAL_JUMP_HEIGHT;
+                if (player.isRolling) {
+                    createProjectile(player.rollingType, player.gridX + (cameraX/GRID_SIZE), 0, 45 * timeScale, -2, true);
+                    player.isRolling = false; player.rollingType = null;
+                    jumpHeight = 4.0;
+                }
                 player.velocityY = -Math.sqrt(2 * BASE_GRAVITY * (GRID_SIZE * jumpHeight));
                 player.isJumping = true; player.onObstacle = false; 
+                player.onObstacleRef = null;
             }
         }
 
         function gameOver() {
-            if (player.invincibleTimer > 0) return;
-            sounds.bgm.pause(); gameState = 'GAMEOVER'; cancelAnimationFrame(animationId);
-            gameOverScreen.classList.remove('hidden'); finalScoreLabel.innerText = `RECORD: ${score}m`;
+            gameState = 'GAMEOVER'; cancelAnimationFrame(animationId);
+            gameOverScreen.classList.remove('hidden'); finalScoreLabel.innerText = `記録: ${score}m`;
         }
 
         window.addEventListener('keydown', (e) => { 
-            if (e.code === 'Space' || e.key === ' ') { e.preventDefault(); jump(); }
-            if (e.code === 'Digit1' || e.code === 'Numpad1' || e.key === '1') {
-                cameraX += GRID_SIZE * 100; player.footY = GRID_SIZE * 3; player.velocityY = 0; player.invincibleTimer = 180; player.isJumping = true; 
-            }
-            if (e.code === 'KeyE' || e.key.toLowerCase() === 'e') showDebug = true;
+            if (e.code === 'Space' || e.key === ' ' || e.code === 'Enter') { e.preventDefault(); jump(); }
+            if (e.code === 'Digit1' || e.key === '1') { cameraX += GRID_SIZE * 100; player.footY = GRID_SIZE * 3; player.velocityY = 0; player.invincibleTimer = 180; player.isJumping = true; }
+            if (e.code === 'Digit2' || e.key === '2') { spawnEnemyTire(); }
+            if (e.code === 'Digit3' || e.key === '3') { isKey3Pressed = true; }
+            if (e.code === 'Digit4' || e.key === '4') { forceNextSeesaw = true; }
+            if (e.code === 'Digit5' || e.key === '5') { forceNextSinking = true; }
+            if (e.code === 'Digit6' || e.key === '6') { forceNextRope = true; } // 新しい6キー
+            if (e.code === 'KeyE' || e.key.toLowerCase() === 'e') { showDebug = true; }
         });
-        window.addEventListener('keyup', (e) => { if (e.code === 'KeyE' || e.key.toLowerCase() === 'e') showDebug = false; });
+        window.addEventListener('keyup', (e) => { 
+            if (e.code === 'Digit3' || e.key === '3') { isKey3Pressed = false; }
+            if (e.code === 'KeyE' || e.key.toLowerCase() === 'e') { showDebug = false; }
+        });
         canvas.addEventListener('mousedown', () => { if (gameState === 'PLAYING') jump(); });
         canvas.addEventListener('touchstart', (e) => { if (gameState === 'PLAYING') { e.preventDefault(); jump(); } });
         startTownBtn.addEventListener('click', () => { initGame('TOWN'); gameState = 'PLAYING'; startScreen.classList.add('hidden'); gameLoop(); });
